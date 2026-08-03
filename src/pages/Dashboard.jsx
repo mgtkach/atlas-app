@@ -189,61 +189,44 @@ DIAGNOSTIC RESULTS:
 }
 
 function ReportPanel({ project, responses, QUESTIONS, SECTIONS }) {
-  const [report, setReport]     = useState('')
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState('')
-  const [generated, setGenerated] = useState(false)
+  const [prompt, setPrompt] = useState('')
+  const [error, setError]   = useState('')
+  const [copied, setCopied] = useState(false)
   const textareaRef = useRef(null)
 
-  const generate = async () => {
+  const build = () => {
     if (responses.length < 2) {
-      setError('At least 2 responses are needed to generate a meaningful report.')
+      setError('At least 2 responses are needed to produce a meaningful prompt.')
+      setPrompt('')
       return
     }
-    setLoading(true)
     setError('')
-    setReport('')
+    setCopied(false)
+    setPrompt(buildPrompt(project, responses, QUESTIONS, SECTIONS))
+  }
 
-    const prompt = buildPrompt(project, responses, QUESTIONS, SECTIONS)
-
-    try {
-      const res = await fetch('/api/report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt })
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) throw new Error(data.error || 'Report generation failed')
-      if (!data.text) throw new Error('Empty response from API')
-
-      setReport(data.text)
-      setGenerated(true)
-    } catch (err) {
-      console.error(err)
-      setError('Report generation failed. Please try again.')
-    } finally {
-      setLoading(false)
-    }
+  const copy = () => {
+    if (!textareaRef.current) return
+    navigator.clipboard.writeText(textareaRef.current.value)
+      .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+      .catch(() => {})
   }
 
   return (
     <div className="card" style={{ marginBottom: '2rem', borderLeft: '3px solid var(--blue)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div>
-          <h3 style={{ marginBottom: '0.25rem' }}>Facilitator's Findings Report</h3>
+          <h3 style={{ marginBottom: '0.25rem' }}>Facilitator's Findings — Claude prompt</h3>
           <p style={{ fontSize: '0.85rem' }}>
-            AI-generated summary of diagnostic results. Edit before using in your workshop.
+            Build a ready-to-use prompt containing this project's diagnostic data, then paste it into Claude to generate the report.
           </p>
         </div>
         <button
           className="btn btn--primary"
-          onClick={generate}
-          disabled={loading}
+          onClick={build}
           style={{ flexShrink: 0 }}
         >
-          {loading ? 'Generating…' : generated ? '↺ Regenerate report' : '✦ Generate report'}
+          {prompt ? '↺ Rebuild prompt' : '✦ Build prompt'}
         </button>
       </div>
 
@@ -251,58 +234,52 @@ function ReportPanel({ project, responses, QUESTIONS, SECTIONS }) {
         <div className="alert alert--error" style={{ marginBottom: '1rem' }}>{error}</div>
       )}
 
-      {loading && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1.5rem 0', color: 'var(--slate)', fontSize: '0.9rem' }}>
-          <div className="spinner" style={{ width: '24px', height: '24px', borderWidth: '2px' }} />
-          Analysing {responses.length} responses across {QUESTIONS.filter(q => q.type === 'multiple-choice').length} questions…
-        </div>
-      )}
-
-      {report && !loading && (
+      {prompt && (
         <div>
+          <div className="alert alert--info" style={{ marginBottom: '1rem' }}>
+            <strong>How to use:</strong> Copy the prompt below, open{' '}
+            <a href="https://claude.ai" target="_blank" rel="noopener noreferrer">claude.ai</a>{' '}
+            (or any Claude chat), paste it, and send. Claude will write the Facilitator's Findings Report — review and edit it before using in your workshop.
+          </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <span style={{ fontSize: '0.78rem', color: 'var(--slate)', fontWeight: 600 }}>
-              Edit the report below before using in your workshop
+              Prompt ({prompt.length.toLocaleString()} characters)
             </span>
             <button
-              onClick={() => {
-                if (textareaRef.current) {
-                  navigator.clipboard.writeText(textareaRef.current.value)
-                    .catch(() => {})
-                }
-              }}
-              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '0.3rem 0.75rem', fontSize: '0.78rem', cursor: 'pointer', color: 'var(--slate)', fontFamily: 'var(--font-body)' }}
+              onClick={copy}
+              style={{ background: copied ? 'var(--teal)' : 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '0.3rem 0.75rem', fontSize: '0.78rem', cursor: 'pointer', color: copied ? '#fff' : 'var(--slate)', fontFamily: 'var(--font-body)' }}
             >
-              Copy to clipboard
+              {copied ? '✓ Copied' : 'Copy prompt'}
             </button>
           </div>
           <textarea
             ref={textareaRef}
-            value={report}
-            onChange={e => setReport(e.target.value)}
+            value={prompt}
+            onChange={e => setPrompt(e.target.value)}
             style={{
               width: '100%',
-              minHeight: '520px',
+              minHeight: '420px',
               padding: '1rem',
               border: '2px solid var(--border)',
               borderRadius: 'var(--radius)',
-              fontFamily: 'var(--font-body)',
-              fontSize: '0.88rem',
-              lineHeight: 1.75,
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              fontSize: '0.82rem',
+              lineHeight: 1.6,
               color: 'var(--navy)',
               resize: 'vertical',
+              whiteSpace: 'pre-wrap',
             }}
           />
           <p style={{ fontSize: '0.78rem', color: 'var(--slate)', marginTop: '0.5rem' }}>
-            Changes you make here are not saved automatically — copy the text before navigating away.
+            You can tweak the prompt above before copying — for example to change the report format or emphasis.
           </p>
         </div>
       )}
 
-      {!report && !loading && !error && (
+      {!prompt && !error && (
         <div style={{ padding: '1.5rem', background: 'var(--off-white)', borderRadius: 'var(--radius)', textAlign: 'center' }}>
           <p style={{ color: 'var(--slate)', fontSize: '0.9rem' }}>
-            Click "Generate report" to produce a written summary of the diagnostic findings for this project.
+            Click "Build prompt" to assemble a Claude-ready prompt from this project's diagnostic results.
             {responses.length < 2 && ' At least 2 responses are needed.'}
           </p>
         </div>
